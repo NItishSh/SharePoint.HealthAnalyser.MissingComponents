@@ -131,18 +131,26 @@ function Remove-MissingWebPart(){
 	param
 	(
 		[Parameter(Mandatory=$true)]
-		[String]$WebPartGUID
+		[String]$WebPartGUID,
+		[Parameter(Mandatory=$true)]
+		[String]$ContentDB,
+		[Parameter(Mandatory=$true)]
+		[String]$DBServer
 	)	
 	
 	$query = "SELECT Id, SiteId, DirName, LeafName, WebId, ListId, tp_ZoneID  from AllDocs inner join AllWebParts on AllDocs.Id = AllWebParts.tp_PageUrlID where AllWebParts.tp_WebPartTypeID = '$WebPartGUID'" 
-	Get-SPWebApplication | Get-SPSite -Limit ALL |%{
-		$contentDb = Get-SPContentDatabase -site $_.Url
-		if($contentDb -ne $null){
-			$dataSet = Run-SQLQuery -SqlServer $contentDb.Server -SqlDatabase $contentDb.Name -SqlQuery $query
-			if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
-				Delete-Versions($dataSet)
-			}
-		}
+	#Get-SPWebApplication | Get-SPSite -Limit ALL |%{
+	#	$contentDb = Get-SPContentDatabase -site $_.Url
+	#	if($contentDb -ne $null){
+	#		$dataSet = Run-SQLQuery -SqlServer $contentDb.Server -SqlDatabase $contentDb.Name -SqlQuery $query
+	#		if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
+	#			Delete-Versions($dataSet)
+	#		}
+	#	}
+	#}
+	$dataSet = Run-SQLQuery -SqlServer $DBServer -SqlDatabase $ContentDB -SqlQuery $query
+	if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
+		Delete-Versions($dataSet)
 	}
 }
 
@@ -164,4 +172,43 @@ function Remove-MissingSetupFile(){
 			}
 		}
 	}
+}
+function Remove-MissingDependancies(){
+	$Sites =  Get-SPWebApplication -includecentraladministration | where {$_.IsAdministrationWebApplication} | Get-SPSite 
+	$ListItems = $Sites[0].RootWeb.Lists["Review problems and solutions"].Items
+	foreach($item in $ListItems){
+		if($item.Title -eq "Missing server side dependencies."){
+			$delimiters =@("[Missing")
+			$option = [System.StringSplitOptions]::None
+			$issues = @()
+			$item["HealthReportExplanation"].split($delimiters,$option)|%{if($_){$issues+= "[Missing$($_)"}}
+			foreach( $msg in $issues){                
+					if($msg.StartsWith("[MissingWebPart]","CurrentCultureIgnoreCase")){                        						
+						$RegExp = [regex]"([a-z0-9]{8}[-][a-z0-9]{4}[-][a-z0-9]{4}[-][a-z0-9]{4}[-][a-z0-9]{12})"
+						$0utput = $RegExp.Match($msg)
+						$webPartGUID = $0utput.Captures[0].value
+						$contentDB = $msg.Split(@("] times in the database ["),$option)[1].Split(@("],"),$option)[0]
+						$db = Get-SPContentDatabase $contentDB
+						$dbServer = $db.Server
+						#Now you have the complete message, webpartGUID, ContentDB and the DB server. invoke the other module to fix it.
+						Write-Verbose "Troubleshooting the [MissingWebPart] error for the webpart ID : $($webPartGUID)"
+						Remove-MissingWebPart -WebPartGUID $webPartGUID -ContentDB $contentDB -DBServer $dbServer
+					}
+					elseif($msg.StartsWith("[MissingAssembly]","CurrentCultureIgnoreCase")){
+						#Write-Verbose "Checking for the [MissingAssembly] error"
+						Write-Verbose "Fix for [MissingAssembly] is not available in this release"
+						
+					}
+					elseif($msg.StartsWith("[MissingSetupFile]","CurrentCultureIgnoreCase")){
+						#[MissingSetupFile] File [Features\SharePointProject3_Feature1\WebPart1\WebPart1.webpart] is referenced [1] times in the database [Content_PGGM_O], 
+						#but is not installed on the current farm. Please install any feature/solution which contains this file. One or more setup files are referenced in 
+						#the database [Content_PGGM_O], but are not installed on the current farm. Please install any feature or solution which contains these files.
+                        
+						#Write-Verbose "Checking for the [MissingSetupFile] error"
+						Write-Verbose "Fix for [MissingSetupFile] is not available in this release"
+					}
+			}
+		}
+	}
+
 }
