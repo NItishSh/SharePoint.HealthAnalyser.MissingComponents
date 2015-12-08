@@ -132,26 +132,33 @@ function Remove-MissingWebPart(){
 	(
 		[Parameter(Mandatory=$true)]
 		[String]$WebPartGUID,
-		[Parameter(Mandatory=$true)]
-		[String]$ContentDB,
-		[Parameter(Mandatory=$true)]
-		[String]$DBServer
+		$ContentDB
 	)	
 	
 	$query = "SELECT Id, SiteId, DirName, LeafName, WebId, ListId, tp_ZoneID  from AllDocs inner join AllWebParts on AllDocs.Id = AllWebParts.tp_PageUrlID where AllWebParts.tp_WebPartTypeID = '$WebPartGUID'" 
-	#Get-SPWebApplication | Get-SPSite -Limit ALL |%{
-	#	$contentDb = Get-SPContentDatabase -site $_.Url
-	#	if($contentDb -ne $null){
-	#		$dataSet = Run-SQLQuery -SqlServer $contentDb.Server -SqlDatabase $contentDb.Name -SqlQuery $query
-	#		if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
-	#			Delete-Versions($dataSet)
-	#		}
-	#	}
-	#}
-	$dataSet = Run-SQLQuery -SqlServer $DBServer -SqlDatabase $ContentDB -SqlQuery $query
-	if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
-		Delete-Versions($dataSet)
+	if($ContentDB -eq $null)
+	{
+		Get-SPWebApplication | Get-SPSite -Limit ALL |%{
+			$contentDb = Get-SPContentDatabase -site $_.Url
+			if($contentDb -ne $null){
+				$dataSet = Run-SQLQuery -SqlServer $contentDb.Server -SqlDatabase $contentDb.Name -SqlQuery $query
+				if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
+					#try se if you can delete the web part from the page and its versions
+					Delete-Versions($dataSet)
+				}
+			}
+		}
 	}
+	else
+	{
+		$DBServer = $contentDb.Server
+		$dataSet = Run-SQLQuery -SqlServer $DBServer -SqlDatabase $ContentDB -SqlQuery $query
+		if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
+			#try se if you can delete the web part from the page and its versions
+			Delete-Versions($dataSet)
+		}
+	}
+	
 }
 
 function Remove-MissingSetupFile(){
@@ -159,19 +166,46 @@ function Remove-MissingSetupFile(){
 	param
 	(
 		[Parameter(Mandatory=$true)]
-		[String] $SetupPath
+		[String] $SetupPath,
+		$ContentDB
 	)	
 	
 	$query = "SELECT Id, SiteId, DirName, LeafName, WebId, ListId  from AllDocs where SetupPath = '$SetupPath'" 
-	Get-SPWebApplication | Get-SPSite -Limit ALL |%{
-		$contentDb = Get-SPContentDatabase -site $_.Url
-		if($contentDb -ne $null){
-			$dataSet = Run-SQLQuery -SqlServer $contentDb.Server -SqlDatabase $contentDb.Name -SqlQuery $query
-			if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
-					
+	if($ContentDB -eq $null)
+	{
+		Get-SPWebApplication | Get-SPSite -Limit ALL |%{
+			$contentDb = Get-SPContentDatabase -site $_.Url
+			if($contentDb -ne $null){
+				$dataSet = Run-SQLQuery -SqlServer $contentDb.Server -SqlDatabase $contentDb.Name -SqlQuery $query
+				if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
+					#get spweb using WebId
+					#get the file from Id
+					# decide what to do	
+				}
 			}
 		}
 	}
+	else
+	{
+		$DBServer = $contentDb.Server
+		$dataSet = Run-SQLQuery -SqlServer $DBServer -SqlDatabase $contentDb.Name -SqlQuery $query
+		if($dataSet.Tables[0].Rows -ne $null -and $dataSet.Tables[0].Rows.Count -gt 0){
+			#get spweb using WebId
+			#get the file from Id
+			# decide what to do	
+		}	
+	}
+}
+
+function Remove-MissingAssembly()
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory=$true)]
+		[String] $Assembly,
+		$ContentDB
+	)
 }
 function Remove-MissingDependancies(){
 	$Sites =  Get-SPWebApplication -includecentraladministration | where {$_.IsAdministrationWebApplication} | Get-SPSite 
@@ -192,7 +226,7 @@ function Remove-MissingDependancies(){
 						$dbServer = $db.Server
 						#Now you have the complete message, webpartGUID, ContentDB and the DB server. invoke the other module to fix it.
 						Write-Verbose "Troubleshooting the [MissingWebPart] error for the webpart ID : $($webPartGUID)"
-						Remove-MissingWebPart -WebPartGUID $webPartGUID -ContentDB $contentDB -DBServer $dbServer
+						Remove-MissingWebPart -WebPartGUID $webPartGUID -ContentDB $db
 					}
 					elseif($msg.StartsWith("[MissingAssembly]","CurrentCultureIgnoreCase")){
 						#Write-Verbose "Checking for the [MissingAssembly] error"
