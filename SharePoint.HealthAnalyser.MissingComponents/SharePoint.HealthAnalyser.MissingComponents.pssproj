@@ -32,6 +32,10 @@
     <Compile Include="SharePoint.HealthAnalyser.MissingComponents.psm1" />
     <Compile Include="test.ps1" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="MissingSetupFile.html" />
+    <Content Include="MissingWebPartandMissingAssembly .html" />
+  </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <Target Name="Build" />
 </Project>
